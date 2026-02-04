@@ -188,7 +188,7 @@ export function getValidatorApi(
   async function getGenesisBlockRoot(state: IBeaconStateView): Promise<Root> {
     if (!genesisBlockRoot) {
       // Close to genesis the genesis block may not be available in the DB
-      if (state.slot < SLOTS_PER_HISTORICAL_ROOT) {
+      if (state.slot < SLOTS_PER_HISTORICAL_ROOT && state.slot > GENESIS_SLOT) {
         genesisBlockRoot = state.getBlockRootAtSlot(GENESIS_SLOT);
       }
 

@@ -1,4 +1,3 @@
-import {PubkeyIndexMap} from "@chainsafe/pubkey-index-map";
 import {BeaconConfig} from "@lodestar/config";
 import {
   DataAvailabilityStatus,
@@ -30,7 +29,6 @@ export async function getHistoricalState(
   slot: number,
   config: BeaconConfig,
   db: IBeaconDb,
-  pubkey2index: PubkeyIndexMap,
   metrics?: HistoricalStateRegenMetrics
 ): Promise<Uint8Array> {
   const regenTimer = metrics?.regenTime.startTimer();
