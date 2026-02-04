@@ -1,5 +1,5 @@
 import {ChainForkConfig} from "@lodestar/config";
-import {SLOTS_PER_EPOCH, SLOTS_PER_HISTORICAL_ROOT} from "@lodestar/params";
+import {SLOTS_PER_EPOCH} from "@lodestar/params";
 import {
   DataAvailabilityStatus,
   EffectiveBalanceIncrements,
@@ -719,8 +719,7 @@ export class ForkChoice implements IForkChoice {
     }
 
     const targetSlot = computeStartSlotAtEpoch(blockEpoch);
-    const targetRoot =
-      slot === targetSlot ? blockRoot : state.getBlockRootAtSlot(targetSlot);
+    const targetRoot = slot === targetSlot ? blockRoot : state.getBlockRootAtSlot(targetSlot);
 
     // This does not apply a vote to the block, it just makes fork choice aware of the block so
     // it can still be identified as the head even if it doesn't have any votes.
