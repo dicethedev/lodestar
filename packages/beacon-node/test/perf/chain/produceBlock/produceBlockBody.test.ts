@@ -2,7 +2,7 @@ import {generateKeyPair} from "@libp2p/crypto/keys";
 import {afterAll, beforeAll, bench, describe} from "@chainsafe/benchmark";
 import {config} from "@lodestar/config/default";
 import {LevelDbController} from "@lodestar/db/controller/level";
-import {CachedBeaconStateAltair} from "@lodestar/state-transition";
+import {BeaconStateView, CachedBeaconStateAltair} from "@lodestar/state-transition";
 import {defaultOptions as defaultValidatorOptions} from "@lodestar/validator";
 import {generatePerfTestCachedStateAltair} from "../../../../../state-transition/test/perf/util.js";
 import {BeaconChain} from "../../../../src/chain/index.js";
@@ -47,7 +47,7 @@ describe("produceBlockBody", () => {
         processShutdownCallback: () => {},
         metrics: null,
         validatorMonitor: null,
-        anchorState: state,
+        anchorState: new BeaconStateView(state),
         isAnchorStateFinalized: true,
         executionEngine: new ExecutionEngineDisabled(),
       }
@@ -70,7 +70,7 @@ describe("produceBlockBody", () => {
       const proposerIndex = state.epochCtx.getBeaconProposer(state.slot);
       const proposerPubKey = state.epochCtx.index2pubkey[proposerIndex].toBytes();
 
-      return {chain, state, head, proposerIndex, proposerPubKey};
+      return {chain, state: new BeaconStateView(state), head, proposerIndex, proposerPubKey};
     },
     fn: async ({chain, state, head, proposerIndex, proposerPubKey}) => {
       const slot = state.slot;

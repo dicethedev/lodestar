@@ -47,7 +47,7 @@ export async function validateAttesterSlashing(
       chain.config,
       chain.index2pubkey,
       state.slot,
-      state.validators.length,
+      state.getValidatorCount(),
       attesterSlashing,
       false
     );

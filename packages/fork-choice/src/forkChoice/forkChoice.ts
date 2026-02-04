@@ -1,19 +1,16 @@
 import {ChainForkConfig} from "@lodestar/config";
 import {SLOTS_PER_EPOCH, SLOTS_PER_HISTORICAL_ROOT} from "@lodestar/params";
 import {
-  CachedBeaconStateAllForks,
   DataAvailabilityStatus,
   EffectiveBalanceIncrements,
+  IBeaconStateView,
   ZERO_HASH,
   computeEpochAtSlot,
   computeSlotsSinceEpochStart,
   computeStartSlotAtEpoch,
   getAttesterSlashableIndices,
   isExecutionBlockBodyType,
-  isExecutionEnabled,
-  isExecutionStateType,
 } from "@lodestar/state-transition";
-import {computeUnrealizedCheckpoints} from "@lodestar/state-transition/epoch";
 import {
   AttesterSlashing,
   BeaconBlock,
@@ -577,7 +574,7 @@ export class ForkChoice implements IForkChoice {
    */
   onBlock(
     block: BeaconBlock,
-    state: CachedBeaconStateAllForks,
+    state: IBeaconStateView,
     blockDelaySec: number,
     currentSlot: Slot,
     executionStatus: MaybeValidExecutionStatus,
@@ -699,7 +696,7 @@ export class ForkChoice implements IForkChoice {
         };
       } else {
         // compute new, happens 2/3 first blocks of epoch as monitored in mainnet
-        const unrealized = computeUnrealizedCheckpoints(state);
+        const unrealized = state.computeUnrealizedCheckpoints();
         unrealizedJustifiedCheckpoint = toCheckpointWithHex(unrealized.justifiedCheckpoint);
         unrealizedFinalizedCheckpoint = toCheckpointWithHex(unrealized.finalizedCheckpoint);
       }
@@ -722,7 +719,8 @@ export class ForkChoice implements IForkChoice {
     }
 
     const targetSlot = computeStartSlotAtEpoch(blockEpoch);
-    const targetRoot = slot === targetSlot ? blockRoot : state.blockRoots.get(targetSlot % SLOTS_PER_HISTORICAL_ROOT);
+    const targetRoot =
+      slot === targetSlot ? blockRoot : state.getBlockRootAtSlot(targetSlot % SLOTS_PER_HISTORICAL_ROOT);
 
     // This does not apply a vote to the block, it just makes fork choice aware of the block so
     // it can still be identified as the head even if it doesn't have any votes.
@@ -743,7 +741,7 @@ export class ForkChoice implements IForkChoice {
       unrealizedFinalizedEpoch: unrealizedFinalizedCheckpoint.epoch,
       unrealizedFinalizedRoot: unrealizedFinalizedCheckpoint.rootHex,
 
-      ...(isExecutionBlockBodyType(block.body) && isExecutionStateType(state) && isExecutionEnabled(state, block)
+      ...(isExecutionBlockBodyType(block.body) && state.isExecutionStateType() && state.isExecutionEnabled(block)
         ? {
             executionPayloadBlockHash: toRootHex(block.body.executionPayload.blockHash),
             executionPayloadNumber: block.body.executionPayload.blockNumber,

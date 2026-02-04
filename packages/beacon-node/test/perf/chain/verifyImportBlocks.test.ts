@@ -3,6 +3,7 @@ import {afterAll, beforeAll, bench, describe, setBenchOpts} from "@chainsafe/ben
 import {config} from "@lodestar/config/default";
 import {LevelDbController} from "@lodestar/db/controller/level";
 import {SLOTS_PER_EPOCH} from "@lodestar/params";
+import {BeaconStateView} from "@lodestar/state-transition";
 import {sleep, toHex} from "@lodestar/utils";
 import {defaultOptions as defaultValidatorOptions} from "@lodestar/validator";
 import {rangeSyncTest} from "../../../../state-transition/test/perf/params.js";
@@ -100,7 +101,7 @@ describe.skip("verify+import blocks - range sync perf test", () => {
           processShutdownCallback: () => {},
           metrics: null,
           validatorMonitor: null,
-          anchorState: state,
+          anchorState: new BeaconStateView(state),
           isAnchorStateFinalized: true,
           executionEngine: new ExecutionEngineDisabled(),
         }

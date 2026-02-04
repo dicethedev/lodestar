@@ -1,8 +1,4 @@
-import {
-  CachedBeaconStateAllForks,
-  DataAvailabilityStatus,
-  EffectiveBalanceIncrements,
-} from "@lodestar/state-transition";
+import {DataAvailabilityStatus, EffectiveBalanceIncrements, IBeaconStateView} from "@lodestar/state-transition";
 import {AttesterSlashing, BeaconBlock, Epoch, IndexedAttestation, Root, RootHex, Slot} from "@lodestar/types";
 import {LVHExecResponse, MaybeValidExecutionStatus, ProtoBlock, ProtoNode} from "../protoArray/interface.js";
 import {UpdateAndGetHeadOpt} from "./forkChoice.js";
@@ -136,7 +132,7 @@ export interface IForkChoice {
    */
   onBlock(
     block: BeaconBlock,
-    state: CachedBeaconStateAllForks,
+    state: IBeaconStateView,
     blockDelaySec: number,
     currentSlot: Slot,
     executionStatus: MaybeValidExecutionStatus,

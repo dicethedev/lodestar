@@ -1,7 +1,7 @@
 import {generateKeyPair} from "@libp2p/crypto/keys";
 import {PubkeyIndexMap} from "@chainsafe/pubkey-index-map";
 import {ChainForkConfig, createBeaconConfig} from "@lodestar/config";
-import {Index2PubkeyCache, createCachedBeaconState, syncPubkeys} from "@lodestar/state-transition";
+import {BeaconStateView, Index2PubkeyCache, createCachedBeaconState, syncPubkeys} from "@lodestar/state-transition";
 import {ssz} from "@lodestar/types";
 import {sleep} from "@lodestar/utils";
 import {BeaconChain} from "../../src/chain/chain.js";
@@ -88,7 +88,7 @@ export async function getNetworkForTest(
       ),
       metrics: null,
       validatorMonitor: null,
-      anchorState: cachedState,
+      anchorState: new BeaconStateView(cachedState),
       isAnchorStateFinalized: true,
       executionEngine: new ExecutionEngineDisabled(),
     }

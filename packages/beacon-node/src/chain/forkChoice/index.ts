@@ -10,22 +10,17 @@ import {
 } from "@lodestar/fork-choice";
 import {ZERO_HASH_HEX} from "@lodestar/params";
 import {
-  CachedBeaconStateAllForks,
-  CachedBeaconStateGloas,
   DataAvailabilityStatus,
-  computeAnchorCheckpoint,
+  IBeaconStateView,
   computeEpochAtSlot,
   computeStartSlotAtEpoch,
-  getBlockRootAtSlot,
-  getEffectiveBalanceIncrementsZeroInactive,
-  isExecutionStateType,
-  isMergeTransitionComplete,
 } from "@lodestar/state-transition";
 import {Slot, ssz} from "@lodestar/types";
 import {Logger, toRootHex} from "@lodestar/utils";
 import {GENESIS_SLOT} from "../../constants/index.js";
 import {Metrics} from "../../metrics/index.js";
 import {ChainEvent, ChainEventEmitter} from "../emitter.js";
+import {computeAnchorCheckpoint} from "../initState.js";
 
 export type ForkChoiceOpts = RawForkChoiceOpts & {
   // for testing only
@@ -44,7 +39,7 @@ export function initializeForkChoice(
   config: ChainForkConfig,
   emitter: ChainEventEmitter,
   currentSlot: Slot,
-  state: CachedBeaconStateAllForks,
+  state: IBeaconStateView,
   isFinalizedState: boolean,
   opts: ForkChoiceOpts,
   justifiedBalancesGetter: JustifiedBalancesGetter,
@@ -81,7 +76,7 @@ export function initializeForkChoiceFromFinalizedState(
   config: ChainForkConfig,
   emitter: ChainEventEmitter,
   currentSlot: Slot,
-  state: CachedBeaconStateAllForks,
+  state: IBeaconStateView,
   opts: ForkChoiceOpts,
   justifiedBalancesGetter: JustifiedBalancesGetter,
   metrics: Metrics | null,
@@ -98,7 +93,7 @@ export function initializeForkChoiceFromFinalizedState(
     epoch: checkpoint.epoch === 0 ? checkpoint.epoch : checkpoint.epoch + 1,
   };
 
-  const justifiedBalances = getEffectiveBalanceIncrementsZeroInactive(state);
+  const justifiedBalances = state.getEffectiveBalanceIncrementsZeroInactive();
 
   // forkchoiceConstructor is only used for some test cases
   // production code use ForkChoice constructor directly
@@ -136,7 +131,7 @@ export function initializeForkChoiceFromFinalizedState(
         unrealizedFinalizedEpoch: finalizedCheckpoint.epoch,
         unrealizedFinalizedRoot: toRootHex(finalizedCheckpoint.root),
 
-        ...(isExecutionStateType(state) && isMergeTransitionComplete(state)
+        ...(state.isExecutionStateType() && state.isMergeTransitionComplete()
           ? {
               executionPayloadBlockHash: toRootHex(state.latestExecutionPayloadHeader.blockHash),
               executionPayloadNumber: state.latestExecutionPayloadHeader.blockNumber,
@@ -145,19 +140,19 @@ export function initializeForkChoiceFromFinalizedState(
           : {executionPayloadBlockHash: null, executionStatus: ExecutionStatus.PreMerge}),
 
         dataAvailabilityStatus: DataAvailabilityStatus.PreData,
-        ...(computeEpochAtSlot(blockHeader.slot) < state.config.GLOAS_FORK_EPOCH
+        ...(computeEpochAtSlot(blockHeader.slot) < config.GLOAS_FORK_EPOCH
           ? {
               builderIndex: undefined,
               blockHashHex: undefined,
             }
           : {
-              builderIndex: (state as CachedBeaconStateGloas).latestExecutionPayloadBid.builderIndex,
-              blockHashHex: toRootHex((state as CachedBeaconStateGloas).latestExecutionPayloadBid.blockHash),
+              builderIndex: state.latestExecutionPayloadBid.builderIndex,
+              blockHashHex: toRootHex(state.latestExecutionPayloadBid.blockHash),
             }),
       },
       currentSlot
     ),
-    state.validators.length,
+    state.getValidatorCount(),
     metrics,
     opts,
     logger
@@ -171,15 +166,15 @@ export function initializeForkChoiceFromUnfinalizedState(
   config: ChainForkConfig,
   emitter: ChainEventEmitter,
   currentSlot: Slot,
-  unfinalizedState: CachedBeaconStateAllForks,
+  unfinalizedState: IBeaconStateView,
   opts: ForkChoiceOpts,
   justifiedBalancesGetter: JustifiedBalancesGetter,
   metrics: Metrics | null,
   logger?: Logger
 ): ForkChoice {
   const {blockHeader} = computeAnchorCheckpoint(config, unfinalizedState);
-  const finalizedCheckpoint = unfinalizedState.finalizedCheckpoint.toValue();
-  const justifiedCheckpoint = unfinalizedState.currentJustifiedCheckpoint.toValue();
+  const finalizedCheckpoint = unfinalizedState.finalizedCheckpoint;
+  const justifiedCheckpoint = unfinalizedState.currentJustifiedCheckpoint;
   const headRoot = toRootHex(ssz.phase0.BeaconBlockHeader.hashTreeRoot(blockHeader));
 
   const logCtx = {
@@ -195,7 +190,7 @@ export function initializeForkChoiceFromUnfinalizedState(
   logger?.warn("Initializing fork choice from unfinalized state", logCtx);
 
   // this is not the justified state, but there is no other ways to get justified balances
-  const justifiedBalances = getEffectiveBalanceIncrementsZeroInactive(unfinalizedState);
+  const justifiedBalances = unfinalizedState.getEffectiveBalanceIncrementsZeroInactive();
   const store = new ForkChoiceStore(
     currentSlot,
     justifiedCheckpoint,
@@ -226,7 +221,7 @@ export function initializeForkChoiceFromUnfinalizedState(
     unrealizedFinalizedEpoch: finalizedCheckpoint.epoch,
     unrealizedFinalizedRoot: toRootHex(finalizedCheckpoint.root),
 
-    ...(isExecutionStateType(unfinalizedState) && isMergeTransitionComplete(unfinalizedState)
+    ...(unfinalizedState.isExecutionStateType() && unfinalizedState.isMergeTransitionComplete()
       ? {
           executionPayloadBlockHash: toRootHex(unfinalizedState.latestExecutionPayloadHeader.blockHash),
           executionPayloadNumber: unfinalizedState.latestExecutionPayloadHeader.blockNumber,
@@ -235,14 +230,14 @@ export function initializeForkChoiceFromUnfinalizedState(
       : {executionPayloadBlockHash: null, executionStatus: ExecutionStatus.PreMerge}),
 
     dataAvailabilityStatus: DataAvailabilityStatus.PreData,
-    ...(computeEpochAtSlot(blockHeader.slot) < unfinalizedState.config.GLOAS_FORK_EPOCH
+    ...(computeEpochAtSlot(blockHeader.slot) < config.GLOAS_FORK_EPOCH
       ? {
           builderIndex: undefined,
           blockHashHex: undefined,
         }
       : {
-          builderIndex: (unfinalizedState as CachedBeaconStateGloas).latestExecutionPayloadBid.builderIndex,
-          blockHashHex: toRootHex((unfinalizedState as CachedBeaconStateGloas).latestExecutionPayloadBid.blockHash),
+          builderIndex: unfinalizedState.latestExecutionPayloadBid.builderIndex,
+          blockHashHex: toRootHex(unfinalizedState.latestExecutionPayloadBid.blockHash),
         }),
   };
 
@@ -257,7 +252,7 @@ export function initializeForkChoiceFromUnfinalizedState(
     // dummy data, we're not able to regen state before headBlock
     stateRoot: ZERO_HASH_HEX,
     blockRoot: headBlock.parentRoot,
-    targetRoot: toRootHex(getBlockRootAtSlot(unfinalizedState, computeStartSlotAtEpoch(parentEpoch))),
+    targetRoot: toRootHex(unfinalizedState.getBlockRootAtSlot(computeStartSlotAtEpoch(parentEpoch))),
   };
 
   const justifiedBlock: ProtoBlock = {
@@ -299,7 +294,7 @@ export function initializeForkChoiceFromUnfinalizedState(
     config,
     store,
     protoArray,
-    unfinalizedState.validators.length,
+    unfinalizedState.getValidatorCount(),
     metrics,
     opts,
     logger

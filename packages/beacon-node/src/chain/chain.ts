@@ -1,28 +1,20 @@
 import path from "node:path";
 import {PrivateKey} from "@libp2p/interface";
 import {PubkeyIndexMap} from "@chainsafe/pubkey-index-map";
-import {CompositeTypeAny, TreeView, Type} from "@chainsafe/ssz";
+import {Type} from "@chainsafe/ssz";
 import {BeaconConfig} from "@lodestar/config";
 import {CheckpointWithHex, IForkChoice, ProtoBlock, UpdateHeadOpt} from "@lodestar/fork-choice";
 import {LoggerNode} from "@lodestar/logger/node";
 import {EFFECTIVE_BALANCE_INCREMENT, GENESIS_SLOT, SLOTS_PER_EPOCH, isForkPostElectra} from "@lodestar/params";
 import {
-  BeaconStateAllForks,
-  BeaconStateElectra,
-  CachedBeaconStateAllForks,
   EffectiveBalanceIncrements,
   EpochShuffling,
+  IBeaconStateView,
   Index2PubkeyCache,
-  computeAnchorCheckpoint,
-  computeAttestationsRewards,
-  computeBlockRewards,
   computeEndSlotAtEpoch,
   computeEpochAtSlot,
   computeStartSlotAtEpoch,
-  computeSyncCommitteeRewards,
-  getEffectiveBalanceIncrementsZeroInactive,
   getEffectiveBalancesFromStateBytes,
-  processSlots,
 } from "@lodestar/state-transition";
 import {
   BeaconBlock,
@@ -74,6 +66,7 @@ import {ColumnReconstructionTracker} from "./ColumnReconstructionTracker.js";
 import {ChainEvent, ChainEventEmitter} from "./emitter.js";
 import {ForkchoiceCaller, initializeForkChoice} from "./forkChoice/index.js";
 import {GetBlobsTracker} from "./GetBlobsTracker.js";
+import {computeAnchorCheckpoint} from "./initState.js";
 import {CommonBlockBody, FindHeadFnName, IBeaconChain, ProposerPreparationData, StateGetOpts} from "./interface.js";
 import {LightClientServer} from "./lightClient/index.js";
 import {
@@ -254,7 +247,7 @@ export class BeaconChain implements IBeaconChain {
       clock?: IClock;
       metrics: Metrics | null;
       validatorMonitor: ValidatorMonitor | null;
-      anchorState: CachedBeaconStateAllForks;
+      anchorState: IBeaconStateView;
       isAnchorStateFinalized: boolean;
       executionEngine: IExecutionEngine;
       executionBuilder?: IExecutionBuilder;
@@ -319,16 +312,16 @@ export class BeaconChain implements IBeaconChain {
 
     this.shufflingCache = new ShufflingCache(metrics, logger, this.opts, [
       {
-        shuffling: anchorState.epochCtx.previousShuffling,
-        decisionRoot: anchorState.epochCtx.previousDecisionRoot,
+        shuffling: anchorState.getPreviousShuffling(),
+        decisionRoot: anchorState.previousDecisionRoot,
       },
       {
-        shuffling: anchorState.epochCtx.currentShuffling,
-        decisionRoot: anchorState.epochCtx.currentDecisionRoot,
+        shuffling: anchorState.getCurrentShuffling(),
+        decisionRoot: anchorState.currentDecisionRoot,
       },
       {
-        shuffling: anchorState.epochCtx.nextShuffling,
-        decisionRoot: anchorState.epochCtx.nextDecisionRoot,
+        shuffling: anchorState.getNextShuffling(),
+        decisionRoot: anchorState.nextDecisionRoot,
       },
     ]);
 
@@ -338,7 +331,7 @@ export class BeaconChain implements IBeaconChain {
 
     const fileDataStore = opts.nHistoricalStatesFileDataStore ?? true;
     const blockStateCache = new FIFOBlockStateCache(this.opts, {metrics});
-    this.bufferPool = new BufferPool(anchorState.type.tree_serializedSize(anchorState.node), metrics);
+    this.bufferPool = new BufferPool(anchorState.serializedSize(), metrics);
 
     this.cpStateDatastore = fileDataStore ? new FileCPStateDatastore(dataDir) : new DbCPStateDatastore(this.db);
     const checkpointStateCache: CheckpointStateCache = new PersistentCheckpointStateCache(
@@ -508,7 +501,7 @@ export class BeaconChain implements IBeaconChain {
     await this.opPool.toPersisted(this.db);
   }
 
-  getHeadState(): CachedBeaconStateAllForks {
+  getHeadState(): IBeaconStateView {
     // head state should always exist
     const head = this.forkChoice.getHead();
     const headState = this.regen.getClosestHeadState(head);
@@ -518,11 +511,11 @@ export class BeaconChain implements IBeaconChain {
     return headState;
   }
 
-  async getHeadStateAtCurrentEpoch(regenCaller: RegenCaller): Promise<CachedBeaconStateAllForks> {
+  async getHeadStateAtCurrentEpoch(regenCaller: RegenCaller): Promise<IBeaconStateView> {
     return this.getHeadStateAtEpoch(this.clock.currentEpoch, regenCaller);
   }
 
-  async getHeadStateAtEpoch(epoch: Epoch, regenCaller: RegenCaller): Promise<CachedBeaconStateAllForks> {
+  async getHeadStateAtEpoch(epoch: Epoch, regenCaller: RegenCaller): Promise<IBeaconStateView> {
     // using getHeadState() means we'll use checkpointStateCache if it's available
     const headState = this.getHeadState();
     // head state is in the same epoch, or we pulled up head state already from past epoch
@@ -539,7 +532,7 @@ export class BeaconChain implements IBeaconChain {
   async getStateBySlot(
     slot: Slot,
     opts?: StateGetOpts
-  ): Promise<{state: CachedBeaconStateAllForks; executionOptimistic: boolean; finalized: boolean} | null> {
+  ): Promise<{state: IBeaconStateView; executionOptimistic: boolean; finalized: boolean} | null> {
     const finalizedBlock = this.forkChoice.getFinalizedBlock();
 
     if (slot < finalizedBlock.slot) {
@@ -589,15 +582,15 @@ export class BeaconChain implements IBeaconChain {
   async getStateByStateRoot(
     stateRoot: RootHex,
     opts?: StateGetOpts
-  ): Promise<{state: CachedBeaconStateAllForks | Uint8Array; executionOptimistic: boolean; finalized: boolean} | null> {
+  ): Promise<{state: IBeaconStateView | Uint8Array; executionOptimistic: boolean; finalized: boolean} | null> {
     if (opts?.allowRegen) {
       const state = await this.regen.getState(stateRoot, RegenCaller.restApi);
-      const block = this.forkChoice.getBlock(state.latestBlockHeader.hashTreeRoot());
+      const block = this.forkChoice.getBlock(ssz.phase0.BeaconBlockHeader.hashTreeRoot(state.latestBlockHeader));
       const finalizedEpoch = this.forkChoice.getFinalizedCheckpoint().epoch;
       return {
         state,
         executionOptimistic: block != null && isOptimisticBlock(block),
-        finalized: state.epochCtx.epoch <= finalizedEpoch && finalizedEpoch !== GENESIS_EPOCH,
+        finalized: state.epoch <= finalizedEpoch && finalizedEpoch !== GENESIS_EPOCH,
       };
     }
 
@@ -608,12 +601,14 @@ export class BeaconChain implements IBeaconChain {
     // TODO: This is very inneficient for debug requests of serialized content, since it deserializes to serialize again
     const cachedStateCtx = this.regen.getStateSync(stateRoot);
     if (cachedStateCtx) {
-      const block = this.forkChoice.getBlock(cachedStateCtx.latestBlockHeader.hashTreeRoot());
+      const block = this.forkChoice.getBlock(
+        ssz.phase0.BeaconBlockHeader.hashTreeRoot(cachedStateCtx.latestBlockHeader)
+      );
       const finalizedEpoch = this.forkChoice.getFinalizedCheckpoint().epoch;
       return {
         state: cachedStateCtx,
         executionOptimistic: block != null && isOptimisticBlock(block),
-        finalized: cachedStateCtx.epochCtx.epoch <= finalizedEpoch && finalizedEpoch !== GENESIS_EPOCH,
+        finalized: cachedStateCtx.epoch <= finalizedEpoch && finalizedEpoch !== GENESIS_EPOCH,
       };
     }
 
@@ -638,16 +633,18 @@ export class BeaconChain implements IBeaconChain {
 
   getStateByCheckpoint(
     checkpoint: CheckpointWithHex
-  ): {state: BeaconStateAllForks; executionOptimistic: boolean; finalized: boolean} | null {
+  ): {state: IBeaconStateView; executionOptimistic: boolean; finalized: boolean} | null {
     // finalized or justified checkpoint states maynot be available with PersistentCheckpointStateCache, use getCheckpointStateOrBytes() api to get Uint8Array
     const cachedStateCtx = this.regen.getCheckpointStateSync(checkpoint);
     if (cachedStateCtx) {
-      const block = this.forkChoice.getBlock(cachedStateCtx.latestBlockHeader.hashTreeRoot());
+      const block = this.forkChoice.getBlock(
+        ssz.phase0.BeaconBlockHeader.hashTreeRoot(cachedStateCtx.latestBlockHeader)
+      );
       const finalizedEpoch = this.forkChoice.getFinalizedCheckpoint().epoch;
       return {
         state: cachedStateCtx,
         executionOptimistic: block != null && isOptimisticBlock(block),
-        finalized: cachedStateCtx.epochCtx.epoch <= finalizedEpoch && finalizedEpoch !== GENESIS_EPOCH,
+        finalized: cachedStateCtx.epoch <= finalizedEpoch && finalizedEpoch !== GENESIS_EPOCH,
       };
     }
 
@@ -656,7 +653,7 @@ export class BeaconChain implements IBeaconChain {
 
   async getStateOrBytesByCheckpoint(
     checkpoint: CheckpointWithHex
-  ): Promise<{state: CachedBeaconStateAllForks | Uint8Array; executionOptimistic: boolean; finalized: boolean} | null> {
+  ): Promise<{state: IBeaconStateView | Uint8Array; executionOptimistic: boolean; finalized: boolean} | null> {
     const cachedStateCtx = await this.regen.getCheckpointStateOrBytes(checkpoint);
     if (cachedStateCtx) {
       const block = this.forkChoice.getBlock(checkpoint.root);
@@ -905,7 +902,7 @@ export class BeaconChain implements IBeaconChain {
       {dontTransferCache: true},
       RegenCaller.produceBlock
     );
-    const proposerIndex = state.epochCtx.getBeaconProposer(slot);
+    const proposerIndex = state.getBeaconProposer(slot);
     const proposerPubKey = this.index2pubkey[proposerIndex].toBytes();
 
     const {body, produceResult, executionPayloadValue, shouldOverrideBuilder} = await produceBlockBody.call(
@@ -1066,8 +1063,8 @@ export class BeaconChain implements IBeaconChain {
    * persist preState, postState and block for further investigation.
    */
   async persistInvalidStateRoot(
-    preState: CachedBeaconStateAllForks,
-    postState: CachedBeaconStateAllForks,
+    preState: IBeaconStateView,
+    postState: IBeaconStateView,
     block: SignedBeaconBlock
   ): Promise<void> {
     const blockSlot = block.message.slot;
@@ -1082,13 +1079,13 @@ export class BeaconChain implements IBeaconChain {
         `${logStr}_block`
       ),
       this.persistSszObject(
-        `preState_slot_${preState.slot}_${preState.type.typeName}`,
+        `preState_slot_${preState.slot}_BeaconState`,
         preState.serialize(),
         preState.hashTreeRoot(),
         `${logStr}_pre_state`
       ),
       this.persistSszObject(
-        `postState_slot_${postState.slot}_${postState.type.typeName}`,
+        `postState_slot_${postState.slot}_BeaconState`,
         postState.serialize(),
         postState.hashTreeRoot(),
         `${logStr}_post_state`
@@ -1105,12 +1102,6 @@ export class BeaconChain implements IBeaconChain {
   persistInvalidSszBytes(typeName: string, sszBytes: Uint8Array, suffix?: string): void {
     if (this.opts.persistInvalidSszObjects) {
       void this.persistSszObject(typeName, sszBytes, sszBytes, suffix);
-    }
-  }
-
-  persistInvalidSszView(view: TreeView<CompositeTypeAny>, suffix?: string): void {
-    if (this.opts.persistInvalidSszObjects) {
-      void this.persistSszObject(view.type.typeName, view.serialize(), view.hashTreeRoot(), suffix);
     }
   }
 
@@ -1131,7 +1122,7 @@ export class BeaconChain implements IBeaconChain {
     this.shufflingCache.insertPromise(attEpoch, shufflingDependentRoot);
     const blockEpoch = computeEpochAtSlot(attHeadBlock.slot);
 
-    let state: CachedBeaconStateAllForks;
+    let state: IBeaconStateView;
     if (blockEpoch < attEpoch - 1) {
       // thanks to one epoch look ahead, we don't need to dial up to attEpoch
       const targetSlot = computeStartSlotAtEpoch(attEpoch - 1);
@@ -1149,7 +1140,7 @@ export class BeaconChain implements IBeaconChain {
     }
     // resolve the promise to unblock other calls of the same epoch and dependent root
     this.shufflingCache.processState(state);
-    return state.epochCtx.getShufflingAtEpoch(attEpoch);
+    return state.getShufflingAtEpoch(attEpoch);
   }
 
   /**
@@ -1159,7 +1150,7 @@ export class BeaconChain implements IBeaconChain {
    */
   private justifiedBalancesGetter(
     checkpoint: CheckpointWithHex,
-    blockState: CachedBeaconStateAllForks
+    blockState: IBeaconStateView
   ): EffectiveBalanceIncrements {
     this.metrics?.balancesCache.requests.inc();
 
@@ -1186,7 +1177,7 @@ export class BeaconChain implements IBeaconChain {
       });
     }
 
-    return getEffectiveBalanceIncrementsZeroInactive(state);
+    return state.getEffectiveBalanceIncrementsZeroInactive();
   }
 
   /**
@@ -1198,8 +1189,8 @@ export class BeaconChain implements IBeaconChain {
    */
   private closestJustifiedBalancesStateToCheckpoint(
     checkpoint: CheckpointWithHex,
-    blockState: CachedBeaconStateAllForks
-  ): {state: CachedBeaconStateAllForks; stateId: string; shouldWarn: boolean} {
+    blockState: IBeaconStateView
+  ): {state: IBeaconStateView; stateId: string; shouldWarn: boolean} {
     const state = this.regen.getCheckpointStateSync(checkpoint);
     if (state) {
       return {state, stateId: "checkpoint_state", shouldWarn: false};
@@ -1275,10 +1266,9 @@ export class BeaconChain implements IBeaconChain {
     const fork = this.config.getForkName(headState.slot);
 
     if (isForkPostElectra(fork)) {
-      const headStateElectra = headState as BeaconStateElectra;
-      metrics.pendingDeposits.set(headStateElectra.pendingDeposits.length);
-      metrics.pendingPartialWithdrawals.set(headStateElectra.pendingPartialWithdrawals.length);
-      metrics.pendingConsolidations.set(headStateElectra.pendingConsolidations.length);
+      metrics.pendingDeposits.set(headState.pendingDepositsLength);
+      metrics.pendingPartialWithdrawals.set(headState.pendingPartialWithdrawalsLength);
+      metrics.pendingConsolidations.set(headState.pendingConsolidationsLength);
     }
   }
 
@@ -1338,7 +1328,7 @@ export class BeaconChain implements IBeaconChain {
     this.logger.verbose("Fork choice justified", {epoch: cp.epoch, root: cp.rootHex});
   }
 
-  private onCheckpoint(this: BeaconChain, _checkpoint: phase0.Checkpoint, state: CachedBeaconStateAllForks): void {
+  private onCheckpoint(this: BeaconChain, _checkpoint: phase0.Checkpoint, state: IBeaconStateView): void {
     // Defer to not block other checkpoint event handlers, which can cause lightclient update delays
     callInNextEventLoop(() => {
       this.shufflingCache.processState(state);
@@ -1425,7 +1415,7 @@ export class BeaconChain implements IBeaconChain {
       if (stateOrBytes instanceof Uint8Array) {
         effectiveBalances = getEffectiveBalancesFromStateBytes(this.config, stateOrBytes, validatorIndices);
       } else {
-        effectiveBalances = validatorIndices.map((index) => stateOrBytes.validators.get(index).effectiveBalance ?? 0);
+        effectiveBalances = validatorIndices.map((index) => stateOrBytes.getValidator(index).effectiveBalance ?? 0);
       }
     }
 
@@ -1475,11 +1465,11 @@ export class BeaconChain implements IBeaconChain {
       throw Error(`Pre-state is unavailable given block's parent root ${toRootHex(block.parentRoot)}`);
     }
 
-    preState = processSlots(preState, block.slot); // Dial preState's slot to block.slot
+    preState = preState.processSlots(block.slot); // Dial preState's slot to block.slot
 
     const proposerRewards = this.regen.getStateSync(toRootHex(block.stateRoot))?.proposerRewards ?? undefined;
 
-    return computeBlockRewards(this.config, block, preState, proposerRewards);
+    return preState.computeBlockRewards(block, proposerRewards);
   }
 
   async getAttestationsRewards(
@@ -1503,7 +1493,7 @@ export class BeaconChain implements IBeaconChain {
       throw Error(`State is not in cache for slot ${slot}`);
     }
 
-    const rewards = await computeAttestationsRewards(this.config, this.pubkey2index, cachedState, validatorIds);
+    const rewards = await cachedState.computeAttestationsRewards(validatorIds);
 
     return {rewards, executionOptimistic, finalized};
   }
@@ -1518,8 +1508,8 @@ export class BeaconChain implements IBeaconChain {
       throw Error(`Pre-state is unavailable given block's parent root ${toRootHex(block.parentRoot)}`);
     }
 
-    preState = processSlots(preState, block.slot); // Dial preState's slot to block.slot
+    preState = preState.processSlots(block.slot); // Dial preState's slot to block.slot
 
-    return computeSyncCommitteeRewards(this.config, this.index2pubkey, block, preState, validatorIds);
+    return preState.computeSyncCommitteeRewards(block, validatorIds ?? []);
   }
 }

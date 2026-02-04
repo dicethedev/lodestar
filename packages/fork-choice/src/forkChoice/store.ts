@@ -1,4 +1,4 @@
-import {CachedBeaconStateAllForks, EffectiveBalanceIncrements} from "@lodestar/state-transition";
+import {EffectiveBalanceIncrements, IBeaconStateView} from "@lodestar/state-transition";
 import {RootHex, Slot, ValidatorIndex, phase0} from "@lodestar/types";
 import {toRootHex} from "@lodestar/utils";
 import {CheckpointHexWithBalance, CheckpointHexWithTotalBalance} from "./interface.js";
@@ -20,7 +20,7 @@ export type JustifiedBalances = EffectiveBalanceIncrements;
  */
 export type JustifiedBalancesGetter = (
   checkpoint: CheckpointWithHex,
-  blockState: CachedBeaconStateAllForks
+  blockState: IBeaconStateView
 ) => JustifiedBalances;
 
 /**

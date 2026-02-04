@@ -2,7 +2,7 @@ import {PubkeyIndexMap} from "@chainsafe/pubkey-index-map";
 import {routes} from "@lodestar/api";
 import {CheckpointWithHex, IForkChoice} from "@lodestar/fork-choice";
 import {GENESIS_SLOT} from "@lodestar/params";
-import {BeaconStateAllForks, CachedBeaconStateAllForks} from "@lodestar/state-transition";
+import {IBeaconStateView} from "@lodestar/state-transition";
 import {BLSPubkey, Epoch, RootHex, Slot, ValidatorIndex, getValidatorStatus, phase0} from "@lodestar/types";
 import {fromHex} from "@lodestar/utils";
 import {IBeaconChain} from "../../../../chain/index.js";
@@ -44,7 +44,7 @@ export function resolveStateId(
 export async function getStateResponseWithRegen(
   chain: IBeaconChain,
   inStateId: routes.beacon.StateId
-): Promise<{state: CachedBeaconStateAllForks | Uint8Array; executionOptimistic: boolean; finalized: boolean}> {
+): Promise<{state: IBeaconStateView | Uint8Array; executionOptimistic: boolean; finalized: boolean}> {
   const stateId = resolveStateId(chain.forkChoice, inStateId);
 
   const res =
@@ -65,28 +65,6 @@ export async function getStateResponseWithRegen(
   return res;
 }
 
-type GeneralValidatorStatus = "active" | "pending" | "exited" | "withdrawal";
-
-function mapToGeneralStatus(subStatus: routes.beacon.ValidatorStatus): GeneralValidatorStatus {
-  switch (subStatus) {
-    case "active_ongoing":
-    case "active_exiting":
-    case "active_slashed":
-      return "active";
-    case "pending_initialized":
-    case "pending_queued":
-      return "pending";
-    case "exited_slashed":
-    case "exited_unslashed":
-      return "exited";
-    case "withdrawal_possible":
-    case "withdrawal_done":
-      return "withdrawal";
-    default:
-      throw new Error(`Unknown substatus: ${subStatus}`);
-  }
-}
-
 export function toValidatorResponse(
   index: ValidatorIndex,
   validator: phase0.Validator,
@@ -103,22 +81,17 @@ export function toValidatorResponse(
 
 export function filterStateValidatorsByStatus(
   statuses: string[],
-  state: BeaconStateAllForks,
+  state: IBeaconStateView,
   pubkey2index: PubkeyIndexMap,
   currentEpoch: Epoch
 ): routes.beacon.ValidatorResponse[] {
   const responses: routes.beacon.ValidatorResponse[] = [];
-  const validatorsArr = state.validators.getAllReadonlyValues();
-  const statusSet = new Set(statuses);
-
-  for (const validator of validatorsArr) {
-    const validatorStatus = getValidatorStatus(validator, currentEpoch);
-    const generalStatus = mapToGeneralStatus(validatorStatus);
-
+  const validators = state.getValidatorsByStatus(new Set(statuses), currentEpoch);
+  for (const validator of validators) {
     const resp = getStateValidatorIndex(validator.pubkey, state, pubkey2index);
-    if (resp.valid && (statusSet.has(validatorStatus) || statusSet.has(generalStatus))) {
+    if (resp.valid) {
       responses.push(
-        toValidatorResponse(resp.validatorIndex, validator, state.balances.get(resp.validatorIndex), currentEpoch)
+        toValidatorResponse(resp.validatorIndex, validator, state.getBalance(resp.validatorIndex), currentEpoch)
       );
     }
   }
@@ -131,7 +104,7 @@ type StateValidatorIndexResponse =
 
 export function getStateValidatorIndex(
   id: routes.beacon.ValidatorId | BLSPubkey,
-  state: BeaconStateAllForks,
+  state: IBeaconStateView,
   pubkey2index: PubkeyIndexMap
 ): StateValidatorIndexResponse {
   if (typeof id === "string") {
@@ -153,7 +126,7 @@ export function getStateValidatorIndex(
     if (!Number.isSafeInteger(validatorIndex)) {
       return {valid: false, code: 400, reason: "Invalid validator index"};
     }
-    if (validatorIndex >= state.validators.length) {
+    if (validatorIndex >= state.getValidatorCount()) {
       return {valid: false, code: 404, reason: "Validator index from future state"};
     }
     return {valid: true, validatorIndex};
@@ -164,7 +137,7 @@ export function getStateValidatorIndex(
   if (validatorIndex === null) {
     return {valid: false, code: 404, reason: "Validator pubkey not found in state"};
   }
-  if (validatorIndex >= state.validators.length) {
+  if (validatorIndex >= state.getValidatorCount()) {
     return {valid: false, code: 404, reason: "Validator pubkey from future state"};
   }
   return {valid: true, validatorIndex};

@@ -1,61 +1,26 @@
 import {PubkeyIndexMap} from "@chainsafe/pubkey-index-map";
 import {BeaconConfig} from "@lodestar/config";
 import {
-  BeaconStateAllForks,
-  CachedBeaconStateAllForks,
   DataAvailabilityStatus,
   ExecutionPayloadStatus,
-  createCachedBeaconState,
-  stateTransition,
+  IBeaconStateView,
+  createBeaconStateViewForHistoricalRegen,
 } from "@lodestar/state-transition";
 import {IBeaconDb} from "../../../db/index.js";
-import {getStateTypeFromBytes} from "../../../util/multifork.js";
 import {HistoricalStateRegenMetrics} from "./metrics.js";
 import {RegenErrorType} from "./types.js";
 
 /**
- * Populate a PubkeyIndexMap with any new entries based on a BeaconState
- */
-export function syncPubkeyCache(state: BeaconStateAllForks, pubkey2index: PubkeyIndexMap): void {
-  // Get the validators sub tree once for all the loop
-  const validators = state.validators;
-
-  const newCount = state.validators.length;
-  for (let i = pubkey2index.size; i < newCount; i++) {
-    const pubkey = validators.getReadonly(i).pubkey;
-    pubkey2index.set(pubkey, i);
-  }
-}
-
-/**
  * Get the nearest BeaconState at or before a slot
  */
-export async function getNearestState(
-  slot: number,
-  config: BeaconConfig,
-  db: IBeaconDb,
-  pubkey2index: PubkeyIndexMap
-): Promise<CachedBeaconStateAllForks> {
+export async function getNearestState(slot: number, config: BeaconConfig, db: IBeaconDb): Promise<IBeaconStateView> {
   const stateBytesArr = await db.stateArchive.binaries({limit: 1, lte: slot, reverse: true});
   if (!stateBytesArr.length) {
     throw new Error("No near state found in the database");
   }
 
   const stateBytes = stateBytesArr[0];
-  const state = getStateTypeFromBytes(config, stateBytes).deserializeToViewDU(stateBytes);
-  syncPubkeyCache(state, pubkey2index);
-
-  return createCachedBeaconState(
-    state,
-    {
-      config,
-      pubkey2index,
-      index2pubkey: [],
-    },
-    {
-      skipSyncPubkeys: true,
-    }
-  );
+  return createBeaconStateViewForHistoricalRegen(config, stateBytes);
 }
 
 /**
@@ -71,7 +36,7 @@ export async function getHistoricalState(
   const regenTimer = metrics?.regenTime.startTimer();
 
   const loadStateTimer = metrics?.loadStateTime.startTimer();
-  let state = await getNearestState(slot, config, db, pubkey2index).catch((e) => {
+  let state = await getNearestState(slot, config, db).catch((e) => {
     metrics?.regenErrorCount.inc({reason: RegenErrorType.loadState});
     throw e;
   });
@@ -81,8 +46,7 @@ export async function getHistoricalState(
   let blockCount = 0;
   for await (const block of db.blockArchive.valuesStream({gt: state.slot, lte: slot})) {
     try {
-      state = stateTransition(
-        state,
+      state = state.stateTransition(
         block,
         {
           verifyProposer: false,

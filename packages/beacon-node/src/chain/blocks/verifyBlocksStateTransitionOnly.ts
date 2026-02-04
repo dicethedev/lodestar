@@ -1,9 +1,8 @@
 import {
-  CachedBeaconStateAllForks,
   DataAvailabilityStatus,
   ExecutionPayloadStatus,
+  IBeaconStateView,
   StateHashTreeRootSource,
-  stateTransition,
 } from "@lodestar/state-transition";
 import {ErrorAborted, Logger} from "@lodestar/utils";
 import {Metrics} from "../../metrics/index.js";
@@ -24,7 +23,7 @@ import {ImportBlockOpts} from "./types.js";
  *   - Check state root matches
  */
 export async function verifyBlocksStateTransitionOnly(
-  preState0: CachedBeaconStateAllForks,
+  preState0: IBeaconStateView,
   blocks: IBlockInput[],
   dataAvailabilityStatuses: DataAvailabilityStatus[],
   logger: Logger,
@@ -32,8 +31,8 @@ export async function verifyBlocksStateTransitionOnly(
   validatorMonitor: ValidatorMonitor | null,
   signal: AbortSignal,
   opts: BlockProcessOpts & ImportBlockOpts
-): Promise<{postStates: CachedBeaconStateAllForks[]; proposerBalanceDeltas: number[]; verifyStateTime: number}> {
-  const postStates: CachedBeaconStateAllForks[] = [];
+): Promise<{postStates: IBeaconStateView[]; proposerBalanceDeltas: number[]; verifyStateTime: number}> {
+  const postStates: IBeaconStateView[] = [];
   const proposerBalanceDeltas: number[] = [];
   const recvToValLatency = Date.now() / 1000 - (opts.seenTimestampSec ?? Date.now() / 1000);
 
@@ -46,8 +45,7 @@ export async function verifyBlocksStateTransitionOnly(
     // STFN - per_slot_processing() + per_block_processing()
     // NOTE: `regen.getPreState()` should have dialed forward the state already caching checkpoint states
     const useBlsBatchVerify = !opts?.disableBlsBatchVerify;
-    const postState = stateTransition(
-      preState,
+    const postState = preState.stateTransition(
       block,
       {
         // NOTE: Assume valid for now while sending payload to execution engine in parallel
@@ -85,7 +83,7 @@ export async function verifyBlocksStateTransitionOnly(
 
     // For metric block profitability
     const proposerIndex = block.message.proposerIndex;
-    proposerBalanceDeltas[i] = postState.balances.get(proposerIndex) - preState.balances.get(proposerIndex);
+    proposerBalanceDeltas[i] = postState.getBalance(proposerIndex) - preState.getBalance(proposerIndex);
 
     // If blocks are invalid in execution the main promise could resolve before this loop ends.
     // In that case stop processing blocks and return early.

@@ -1,7 +1,14 @@
 import {ChainForkConfig} from "@lodestar/config";
 import {ZERO_HASH} from "@lodestar/params";
-import {BeaconStateAllForks, computeEpochAtSlot, computeStartSlotAtEpoch} from "@lodestar/state-transition";
-import {SignedBeaconBlock, ssz} from "@lodestar/types";
+import {
+  BeaconStateAllForks,
+  IBeaconStateView,
+  blockToHeader,
+  computeCheckpointEpochAtStateSlot,
+  computeEpochAtSlot,
+  computeStartSlotAtEpoch,
+} from "@lodestar/state-transition";
+import {SignedBeaconBlock, phase0, ssz} from "@lodestar/types";
 import {Logger, toHex, toRootHex} from "@lodestar/utils";
 import {GENESIS_SLOT} from "../constants/index.js";
 import {IBeaconDb} from "../db/index.js";
@@ -119,9 +126,41 @@ export async function checkAndPersistAnchorState(
   }
 }
 
-export function initBeaconMetrics(metrics: Metrics, state: BeaconStateAllForks): void {
+export function initBeaconMetrics(metrics: Metrics, state: IBeaconStateView): void {
   metrics.headSlot.set(state.slot);
   metrics.previousJustifiedEpoch.set(state.previousJustifiedCheckpoint.epoch);
   metrics.currentJustifiedEpoch.set(state.currentJustifiedCheckpoint.epoch);
   metrics.finalizedEpoch.set(state.finalizedCheckpoint.epoch);
+}
+
+export function computeAnchorCheckpoint(
+  config: ChainForkConfig,
+  anchorState: IBeaconStateView
+): {checkpoint: phase0.Checkpoint; blockHeader: phase0.BeaconBlockHeader} {
+  let blockHeader: phase0.BeaconBlockHeader;
+  let root: Uint8Array;
+  const blockTypes = config.getForkTypes(anchorState.latestBlockHeader.slot);
+
+  if (anchorState.latestBlockHeader.slot === GENESIS_SLOT) {
+    const block = blockTypes.BeaconBlock.defaultValue();
+    block.stateRoot = anchorState.hashTreeRoot();
+    blockHeader = blockToHeader(config, block);
+    root = ssz.phase0.BeaconBlockHeader.hashTreeRoot(blockHeader);
+  } else {
+    blockHeader = ssz.phase0.BeaconBlockHeader.clone(anchorState.latestBlockHeader);
+    if (ssz.Root.equals(blockHeader.stateRoot, ZERO_HASH)) {
+      blockHeader.stateRoot = anchorState.hashTreeRoot();
+    }
+    root = ssz.phase0.BeaconBlockHeader.hashTreeRoot(blockHeader);
+  }
+
+  return {
+    checkpoint: {
+      root,
+      // the checkpoint epoch = computeEpochAtSlot(anchorState.slot) + 1 if slot is not at epoch boundary
+      // this is similar to a process_slots() call
+      epoch: computeCheckpointEpochAtStateSlot(anchorState.slot),
+    },
+    blockHeader,
+  };
 }
