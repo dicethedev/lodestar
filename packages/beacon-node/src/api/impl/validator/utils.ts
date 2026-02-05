@@ -25,7 +25,7 @@ export function computeSubnetForCommitteesAtSlot(
  *       See benchmark -> packages/beacon-node/test/perf/api/impl/validator/attester.test.ts
  */
 export function getPubkeysForIndices(state: IBeaconStateView, indexes: ValidatorIndex[]): BLSPubkey[] {
-  const validatorsLen = state.getValidatorCount(); // Get once, it's expensive
+  const validatorsLen = state.validatorCount; // Get once, it's expensive
 
   const pubkeys: BLSPubkey[] = [];
   for (let i = 0, len = indexes.length; i < len; i++) {

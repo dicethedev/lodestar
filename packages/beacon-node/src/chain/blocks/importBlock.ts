@@ -323,7 +323,7 @@ export async function importBlock(
   // and the block is weak and can potentially be reorged out.
   let shouldOverrideFcu = false;
 
-  if (blockSlot >= currentSlot && postState.isExecutionStateType()) {
+  if (blockSlot >= currentSlot && postState.isExecutionStateType) {
     let notOverrideFcuReason = NotReorgedReason.Unknown;
     const proposalSlot = blockSlot + 1;
     try {
@@ -429,7 +429,7 @@ export async function importBlock(
     // Note: in-lined code from previos handler of ChainEvent.checkpoint
     this.logger.verbose("Checkpoint processed", toCheckpointHex(cp));
 
-    const activeValidatorsCount = checkpointState.getActiveValidatorCount();
+    const activeValidatorsCount = checkpointState.activeValidatorCount;
     this.metrics?.currentActiveValidators.set(activeValidatorsCount);
     this.metrics?.currentValidators.set({status: "active"}, activeValidatorsCount);
 

@@ -330,7 +330,7 @@ export function getBeaconStateApi({
         throw new ApiError(400, `Cannot retrieve pending deposits for pre-electra state fork=${fork}`);
       }
 
-      const pendingDeposits = state.getPendingDeposits();
+      const pendingDeposits = state.pendingDeposits;
 
       return {
         data: context?.returnBytes ? ssz.electra.PendingDeposits.serialize(pendingDeposits) : pendingDeposits,
@@ -346,7 +346,7 @@ export function getBeaconStateApi({
         throw new ApiError(400, `Cannot retrieve pending partial withdrawals for pre-electra state fork=${fork}`);
       }
 
-      const pendingPartialWithdrawals = state.getPendingPartialWithdrawals();
+      const pendingPartialWithdrawals = state.pendingPartialWithdrawals;
 
       return {
         data: context?.returnBytes
@@ -364,7 +364,7 @@ export function getBeaconStateApi({
         throw new ApiError(400, `Cannot retrieve pending consolidations for pre-electra state fork=${fork}`);
       }
 
-      const pendingConsolidations = state.getPendingConsolidations();
+      const pendingConsolidations = state.pendingConsolidations;
 
       return {
         data: context?.returnBytes
@@ -382,7 +382,7 @@ export function getBeaconStateApi({
         throw new ApiError(400, `Cannot retrieve proposer lookahead for pre-fulu state fork=${fork}`);
       }
 
-      const proposerLookahead = state.getProposerLookahead();
+      const proposerLookahead = state.proposerLookahead;
 
       return {
         data: context?.returnBytes ? ssz.fulu.ProposerLookahead.serialize(proposerLookahead) : proposerLookahead,

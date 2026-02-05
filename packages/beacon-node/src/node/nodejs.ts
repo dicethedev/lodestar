@@ -224,7 +224,7 @@ export class BeaconNode {
 
     let executionEngineOpts = opts.executionEngine;
     if (opts.executionEngine.mode === "mock") {
-      const eth1BlockHash = anchorState.isExecutionStateType()
+      const eth1BlockHash = anchorState.isExecutionStateType
         ? toRootHex(anchorState.latestExecutionPayloadHeader.blockHash)
         : undefined;
       executionEngineOpts = {

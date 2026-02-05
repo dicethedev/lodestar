@@ -740,7 +740,7 @@ export class ForkChoice implements IForkChoice {
       unrealizedFinalizedEpoch: unrealizedFinalizedCheckpoint.epoch,
       unrealizedFinalizedRoot: unrealizedFinalizedCheckpoint.rootHex,
 
-      ...(isExecutionBlockBodyType(block.body) && state.isExecutionStateType() && state.isExecutionEnabled(block)
+      ...(isExecutionBlockBodyType(block.body) && state.isExecutionStateType && state.isExecutionEnabled(block)
         ? {
             executionPayloadBlockHash: toRootHex(block.body.executionPayload.blockHash),
             executionPayloadNumber: block.body.executionPayload.blockNumber,

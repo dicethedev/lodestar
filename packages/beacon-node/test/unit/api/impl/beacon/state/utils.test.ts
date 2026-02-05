@@ -18,7 +18,7 @@ describe("beacon state api utils", () => {
 
     it("should return valid: false on validator indices / pubkeys not in the state", () => {
       // "validator id not in state"
-      expect(getStateValidatorIndex(String(state.getValidatorCount()), state, pubkey2index).valid).toBe(false);
+      expect(getStateValidatorIndex(String(state.validatorCount), state, pubkey2index).valid).toBe(false);
       // "validator pubkey not in state"
       expect(
         getStateValidatorIndex(
@@ -30,7 +30,7 @@ describe("beacon state api utils", () => {
     });
 
     it("should return valid: true on validator indices / pubkeys in the state", () => {
-      const index = state.getValidatorCount() - 1;
+      const index = state.validatorCount - 1;
       const resp1 = getStateValidatorIndex(String(index), state, pubkey2index);
       if (resp1.valid) {
         expect(resp1.validatorIndex).toBe(index);

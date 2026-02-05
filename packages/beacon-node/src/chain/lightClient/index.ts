@@ -397,7 +397,7 @@ export class LightClientServer {
     const blockRoot = ssz.phase0.BeaconBlockHeader.hashTreeRoot(header.beacon);
     const blockRootHex = toRootHex(blockRoot);
 
-    const syncCommitteeWitness = postState.getSyncCommitteesWitness(fork);
+    const syncCommitteeWitness = postState.getSyncCommitteesWitness();
 
     // Only store current sync committee once per run
     if (!this.storedCurrentSyncCommittee) {

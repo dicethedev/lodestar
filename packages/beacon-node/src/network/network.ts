@@ -157,7 +157,7 @@ export class Network implements INetwork {
     const events = new NetworkEventBus();
     const aggregatorTracker = new AggregatorTracker();
 
-    const activeValidatorCount = chain.getHeadState().getActiveValidatorCount();
+    const activeValidatorCount = chain.getHeadState().activeValidatorCount;
     const initialStatus = chain.getStatus();
     const initialCustodyGroupCount = chain.custodyConfig.targetCustodyGroupCount;
 

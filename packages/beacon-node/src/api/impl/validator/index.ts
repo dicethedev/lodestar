@@ -1049,7 +1049,7 @@ export function getValidatorApi(
 
       switch (epoch) {
         case stateEpoch:
-          indexes = state.getBeaconProposers();
+          indexes = state.currentProposers;
           break;
 
         case stateEpoch + 1: {
@@ -1058,12 +1058,12 @@ export function getValidatorApi(
           await chain.shufflingCache.get(nextEpoch, state.nextDecisionRoot);
           // Requesting duties for next epoch is allowed since they can be predicted with high probabilities.
           // @see `epochCtx.getBeaconProposersNextEpoch` JSDocs for rationale.
-          indexes = state.getBeaconProposersNextEpoch();
+          indexes = state.nextProposers;
           break;
         }
 
         case stateEpoch - 1: {
-          const indexesPrevEpoch = state.getBeaconProposersPrevEpoch();
+          const indexesPrevEpoch = state.previousProposers;
           if (indexesPrevEpoch === null) {
             // Should not happen as previous proposer duties should be initialized for head state
             // and if we load state from `Uint8Array` it will always be the state of requested epoch

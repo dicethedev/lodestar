@@ -39,7 +39,7 @@ async function validateBlsToExecutionChange(
   const state = chain.getHeadState();
   const {config} = chain;
   const addressChange = blsToExecutionChange.message;
-  if (addressChange.validatorIndex >= state.getValidatorCount()) {
+  if (addressChange.validatorIndex >= state.validatorCount) {
     throw new BlsToExecutionChangeError(GossipAction.REJECT, {
       code: BlsToExecutionChangeErrorCode.INVALID,
     });

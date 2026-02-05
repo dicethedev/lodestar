@@ -1266,9 +1266,9 @@ export class BeaconChain implements IBeaconChain {
     const fork = this.config.getForkName(headState.slot);
 
     if (isForkPostElectra(fork)) {
-      metrics.pendingDeposits.set(headState.pendingDepositsLength);
-      metrics.pendingPartialWithdrawals.set(headState.pendingPartialWithdrawalsLength);
-      metrics.pendingConsolidations.set(headState.pendingConsolidationsLength);
+      metrics.pendingDeposits.set(headState.pendingDepositsCount);
+      metrics.pendingPartialWithdrawals.set(headState.pendingPartialWithdrawalsCount);
+      metrics.pendingConsolidations.set(headState.pendingConsolidationsCount);
     }
   }
 

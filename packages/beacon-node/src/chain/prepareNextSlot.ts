@@ -118,7 +118,7 @@ export class PrepareNextSlotScheduler {
         RegenCaller.precomputeEpoch
       );
 
-      if (prepareState.isExecutionStateType()) {
+      if (prepareState.isExecutionStateType) {
         const proposerIndex = prepareState.getBeaconProposer(prepareSlot);
         const feeRecipient = this.chain.beaconProposerCache.get(proposerIndex);
         let updatedPrepareState = prepareState;

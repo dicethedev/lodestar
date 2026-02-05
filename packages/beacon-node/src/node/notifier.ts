@@ -165,8 +165,8 @@ function getHeadExecutionInfo(
   const executionStatusStr = headInfo.executionStatus.toLowerCase();
 
   // Add execution status to notifier only if head is on/post bellatrix
-  if (headState.isExecutionStateType()) {
-    if (headState.isMergeTransitionComplete()) {
+  if (headState.isExecutionStateType) {
+    if (headState.isMergeTransitionComplete) {
       const executionPayloadHashInfo =
         headInfo.executionStatus !== ExecutionStatus.PreMerge ? headInfo.executionPayloadBlockHash : "empty";
       const executionPayloadNumberInfo =

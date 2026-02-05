@@ -208,7 +208,7 @@ export function getLodestarApi({
       return {
         data: {
           slot: stateView.slot,
-          historicalSummaries: stateView.getHistoricalSummaries(),
+          historicalSummaries: stateView.historicalSummaries,
           proof: proof,
         },
         meta: {executionOptimistic, finalized, version: fork},

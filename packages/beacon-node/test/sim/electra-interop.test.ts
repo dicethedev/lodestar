@@ -361,7 +361,7 @@ describe("executionEngine / ExecutionEngineHttp", () => {
     // Expect new validator to be in unfinalized cache, in state.validators and not in finalized cache
     let headState = bn.chain.getHeadState() as BeaconStateView;
     let epochCtx = headState.cachedState.epochCtx;
-    if (headState.getValidatorCount() !== 33 || headState.getAllBalances().length !== 33) {
+    if (headState.validatorCount !== 33 || headState.getAllBalances().length !== 33) {
       throw Error("New validator is not reflected in the beacon state at slot 5");
     }
     if (epochCtx.index2pubkey.length !== 33 || epochCtx.pubkey2index.size !== 33) {
@@ -388,7 +388,7 @@ describe("executionEngine / ExecutionEngineHttp", () => {
     headState = bn.chain.getHeadState() as BeaconStateView;
     epochCtx = headState.cachedState.epochCtx;
 
-    if (headState.getValidatorCount() !== 33 || headState.getAllBalances().length !== 33) {
+    if (headState.validatorCount !== 33 || headState.getAllBalances().length !== 33) {
       throw Error("New validator is not reflected in the beacon state.");
     }
     if (epochCtx.index2pubkey.length !== 33 || epochCtx.pubkey2index.size !== 33) {

@@ -131,7 +131,7 @@ export function initializeForkChoiceFromFinalizedState(
         unrealizedFinalizedEpoch: finalizedCheckpoint.epoch,
         unrealizedFinalizedRoot: toRootHex(finalizedCheckpoint.root),
 
-        ...(state.isExecutionStateType() && state.isMergeTransitionComplete()
+        ...(state.isExecutionStateType && state.isMergeTransitionComplete
           ? {
               executionPayloadBlockHash: toRootHex(state.latestExecutionPayloadHeader.blockHash),
               executionPayloadNumber: state.latestExecutionPayloadHeader.blockNumber,
@@ -152,7 +152,7 @@ export function initializeForkChoiceFromFinalizedState(
       },
       currentSlot
     ),
-    state.getValidatorCount(),
+    state.validatorCount,
     metrics,
     opts,
     logger
@@ -221,7 +221,7 @@ export function initializeForkChoiceFromUnfinalizedState(
     unrealizedFinalizedEpoch: finalizedCheckpoint.epoch,
     unrealizedFinalizedRoot: toRootHex(finalizedCheckpoint.root),
 
-    ...(unfinalizedState.isExecutionStateType() && unfinalizedState.isMergeTransitionComplete()
+    ...(unfinalizedState.isExecutionStateType && unfinalizedState.isMergeTransitionComplete
       ? {
           executionPayloadBlockHash: toRootHex(unfinalizedState.latestExecutionPayloadHeader.blockHash),
           executionPayloadNumber: unfinalizedState.latestExecutionPayloadHeader.blockNumber,
@@ -290,13 +290,5 @@ export function initializeForkChoiceFromUnfinalizedState(
   // production code use ForkChoice constructor directly
   const forkchoiceConstructor = opts.forkchoiceConstructor ?? ForkChoice;
 
-  return new forkchoiceConstructor(
-    config,
-    store,
-    protoArray,
-    unfinalizedState.getValidatorCount(),
-    metrics,
-    opts,
-    logger
-  );
+  return new forkchoiceConstructor(config, store, protoArray, unfinalizedState.validatorCount, metrics, opts, logger);
 }

@@ -609,7 +609,7 @@ function preparePayloadAttributes(
   if (ForkSeq[fork] >= ForkSeq.capella) {
     // withdrawals logic is now fork aware as it changes on electra fork post capella
     (payloadAttributes as capella.SSEPayloadAttributes["payloadAttributes"]).withdrawals =
-      prepareState.getExpectedWithdrawals(ForkSeq[fork]).expectedWithdrawals;
+      prepareState.getExpectedWithdrawals().expectedWithdrawals;
   }
 
   if (ForkSeq[fork] >= ForkSeq.deneb) {

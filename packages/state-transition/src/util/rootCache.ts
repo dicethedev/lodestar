@@ -19,7 +19,7 @@ export class RootCache {
   getBlockRoot(epoch: Epoch): Root {
     let root = this.blockRootEpochCache.get(epoch);
     if (!root) {
-      root = this.state.getBlockRoot(epoch);
+      root = this.state.getBlockRootAtEpoch(epoch);
       this.blockRootEpochCache.set(epoch, root);
     }
     return root;

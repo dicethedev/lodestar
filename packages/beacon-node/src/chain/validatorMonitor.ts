@@ -745,9 +745,9 @@ export function createValidatorMonitor(
         }
       }
 
-      if (headState.proposersPrevEpoch !== null) {
+      if (headState.previousProposers !== null) {
         // proposersPrevEpoch is null on the first epoch of `headState` being generated
-        for (const [slotIndex, validatorIndex] of headState.proposersPrevEpoch.entries()) {
+        for (const [slotIndex, validatorIndex] of headState.previousProposers.entries()) {
           const validator = validators.get(validatorIndex);
           if (validator) {
             // If expected proposer is a tracked validator

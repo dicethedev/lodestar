@@ -126,7 +126,7 @@ export function getStateValidatorIndex(
     if (!Number.isSafeInteger(validatorIndex)) {
       return {valid: false, code: 400, reason: "Invalid validator index"};
     }
-    if (validatorIndex >= state.getValidatorCount()) {
+    if (validatorIndex >= state.validatorCount) {
       return {valid: false, code: 404, reason: "Validator index from future state"};
     }
     return {valid: true, validatorIndex};
@@ -137,7 +137,7 @@ export function getStateValidatorIndex(
   if (validatorIndex === null) {
     return {valid: false, code: 404, reason: "Validator pubkey not found in state"};
   }
-  if (validatorIndex >= state.getValidatorCount()) {
+  if (validatorIndex >= state.validatorCount) {
     return {valid: false, code: 404, reason: "Validator pubkey from future state"};
   }
   return {valid: true, validatorIndex};

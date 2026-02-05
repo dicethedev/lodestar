@@ -145,7 +145,7 @@ export async function verifyBlockExecutionPayload(
   const block = blockInput.getBlock();
   /** Not null if execution is enabled */
   const executionPayloadEnabled =
-    preState0.isExecutionStateType() &&
+    preState0.isExecutionStateType &&
     isExecutionBlockBodyType(block.message.body) &&
     preState0.isExecutionEnabled(block.message)
       ? block.message.body.executionPayload
