@@ -3,7 +3,7 @@ import {PrivateKey} from "@libp2p/interface";
 import {PubkeyIndexMap} from "@chainsafe/pubkey-index-map";
 import {CompositeTypeAny, TreeView, Type} from "@chainsafe/ssz";
 import {BeaconConfig} from "@lodestar/config";
-import {CheckpointWithHex, IForkChoice, ProtoBlock, UpdateHeadOpt} from "@lodestar/fork-choice";
+import {CheckpointWithPayload, IForkChoice, ProtoBlock, UpdateHeadOpt} from "@lodestar/fork-choice";
 import {LoggerNode} from "@lodestar/logger/node";
 import {EFFECTIVE_BALANCE_INCREMENT, GENESIS_SLOT, SLOTS_PER_EPOCH, isForkPostElectra} from "@lodestar/params";
 import {
@@ -111,7 +111,7 @@ import {DbCPStateDatastore, checkpointToDatastoreKey} from "./stateCache/datasto
 import {FileCPStateDatastore} from "./stateCache/datastore/file.js";
 import {CPStateDatastore} from "./stateCache/datastore/types.js";
 import {FIFOBlockStateCache} from "./stateCache/fifoBlockStateCache.js";
-import {PersistentCheckpointStateCache} from "./stateCache/persistentCheckpointsCache.js";
+import {PersistentCheckpointStateCache, fcCheckpointToHexPayload} from "./stateCache/persistentCheckpointsCache.js";
 import {CheckpointStateCache} from "./stateCache/types.js";
 import {ValidatorMonitor} from "./validatorMonitor.js";
 
@@ -357,7 +357,11 @@ export class BeaconChain implements IBeaconChain {
     const {checkpoint} = computeAnchorCheckpoint(config, anchorState);
     blockStateCache.add(anchorState);
     blockStateCache.setHeadState(anchorState);
-    checkpointStateCache.add(checkpoint, anchorState);
+    // TODO: For Gloas, determine if anchor state is block state or payload state
+    // Pre-Gloas: payloadPresent is always true (execution payload embedded in block)
+    // Post-Gloas: Could be either - depends on whether anchor was loaded with payload processing
+    // For now, assume true
+    checkpointStateCache.add(checkpoint, anchorState, true);
 
     const forkChoice = initializeForkChoice(
       config,
@@ -637,10 +641,11 @@ export class BeaconChain implements IBeaconChain {
   }
 
   getStateByCheckpoint(
-    checkpoint: CheckpointWithHex
+    checkpoint: CheckpointWithPayload
   ): {state: BeaconStateAllForks; executionOptimistic: boolean; finalized: boolean} | null {
     // finalized or justified checkpoint states maynot be available with PersistentCheckpointStateCache, use getCheckpointStateOrBytes() api to get Uint8Array
-    const cachedStateCtx = this.regen.getCheckpointStateSync(checkpoint);
+    const checkpointHexPayload = fcCheckpointToHexPayload(checkpoint);
+    const cachedStateCtx = this.regen.getCheckpointStateSync(checkpointHexPayload);
     if (cachedStateCtx) {
       const block = this.forkChoice.getBlockDefaultStatus(cachedStateCtx.latestBlockHeader.hashTreeRoot());
       const finalizedEpoch = this.forkChoice.getFinalizedCheckpoint().epoch;
@@ -655,9 +660,10 @@ export class BeaconChain implements IBeaconChain {
   }
 
   async getStateOrBytesByCheckpoint(
-    checkpoint: CheckpointWithHex
+    checkpoint: CheckpointWithPayload
   ): Promise<{state: CachedBeaconStateAllForks | Uint8Array; executionOptimistic: boolean; finalized: boolean} | null> {
-    const cachedStateCtx = await this.regen.getCheckpointStateOrBytes(checkpoint);
+    const checkpointHexPayload = fcCheckpointToHexPayload(checkpoint);
+    const cachedStateCtx = await this.regen.getCheckpointStateOrBytes(checkpointHexPayload);
     if (cachedStateCtx) {
       const block = this.forkChoice.getBlockDefaultStatus(checkpoint.root);
       const finalizedEpoch = this.forkChoice.getFinalizedCheckpoint().epoch;
@@ -1158,7 +1164,7 @@ export class BeaconChain implements IBeaconChain {
    * @param blockState state that declares justified checkpoint `checkpoint`
    */
   private justifiedBalancesGetter(
-    checkpoint: CheckpointWithHex,
+    checkpoint: CheckpointWithPayload,
     blockState: CachedBeaconStateAllForks
   ): EffectiveBalanceIncrements {
     this.metrics?.balancesCache.requests.inc();
@@ -1197,10 +1203,11 @@ export class BeaconChain implements IBeaconChain {
    * @param blockState state that declares justified checkpoint `checkpoint`
    */
   private closestJustifiedBalancesStateToCheckpoint(
-    checkpoint: CheckpointWithHex,
+    checkpoint: CheckpointWithPayload,
     blockState: CachedBeaconStateAllForks
   ): {state: CachedBeaconStateAllForks; stateId: string; shouldWarn: boolean} {
-    const state = this.regen.getCheckpointStateSync(checkpoint);
+    const checkpointHexPayload = fcCheckpointToHexPayload(checkpoint);
+    const state = this.regen.getCheckpointStateSync(checkpointHexPayload);
     if (state) {
       return {state, stateId: "checkpoint_state", shouldWarn: false};
     }
@@ -1334,7 +1341,7 @@ export class BeaconChain implements IBeaconChain {
     this.seenContributionAndProof.prune(head.slot);
   }
 
-  private onForkChoiceJustified(this: BeaconChain, cp: CheckpointWithHex): void {
+  private onForkChoiceJustified(this: BeaconChain, cp: CheckpointWithPayload): void {
     this.logger.verbose("Fork choice justified", {epoch: cp.epoch, root: cp.rootHex});
   }
 
@@ -1345,7 +1352,7 @@ export class BeaconChain implements IBeaconChain {
     });
   }
 
-  private async onForkChoiceFinalized(this: BeaconChain, cp: CheckpointWithHex): Promise<void> {
+  private async onForkChoiceFinalized(this: BeaconChain, cp: CheckpointWithPayload): Promise<void> {
     this.logger.verbose("Fork choice finalized", {epoch: cp.epoch, root: cp.rootHex});
     const finalizedSlot = computeStartSlotAtEpoch(cp.epoch);
     this.seenBlockProposers.prune(finalizedSlot);
@@ -1387,7 +1394,7 @@ export class BeaconChain implements IBeaconChain {
     }
   }
 
-  private async updateValidatorsCustodyRequirement(finalizedCheckpoint: CheckpointWithHex): Promise<void> {
+  private async updateValidatorsCustodyRequirement(finalizedCheckpoint: CheckpointWithPayload): Promise<void> {
     if (this.custodyConfig.targetCustodyGroupCount === this.config.NUMBER_OF_CUSTODY_GROUPS) {
       // Custody requirements can only be increased, we can disable dynamic custody updates
       // if the node already maintains custody of all custody groups in case it is configured
