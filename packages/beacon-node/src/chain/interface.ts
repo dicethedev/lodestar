@@ -74,6 +74,7 @@ import {SeenAttestationDatas} from "./seenCache/seenAttestationData.js";
 import {SeenBlockAttesters} from "./seenCache/seenBlockAttesters.js";
 import {SeenBlockInput} from "./seenCache/seenGossipBlockInput.js";
 import {ShufflingCache} from "./shufflingCache.js";
+import {IZkvmExecutionProofVerifier} from "./validation/executionProofVerifier.js";
 import {ValidatorMonitor} from "./validatorMonitor.js";
 
 export {BlockType, type AssembledBlockType};
@@ -130,6 +131,12 @@ export interface IBeaconChain {
   readonly executionPayloadBidPool: ExecutionPayloadBidPool;
   /** EIP-8025: Pool for execution proofs */
   readonly executionProofPool: ExecutionProofPool;
+  /** EIP-8025: When true, skip EL newPayload calls and use execution proofs for validation */
+  readonly activateZkvm: boolean;
+  /** EIP-8025: Minimum distinct proof types required per block in zkvm mode */
+  readonly minProofsRequired: number;
+  /** EIP-8025: Verifier for execution proofs — swap implementation for real zkvm prover */
+  readonly executionProofVerifier: IZkvmExecutionProofVerifier;
   readonly payloadAttestationPool: PayloadAttestationPool;
   readonly opPool: OpPool;
 
@@ -283,6 +290,9 @@ export interface IBeaconChain {
     regenCaller: RegenCaller
   ): Promise<EpochShuffling>;
   updateBuilderStatus(clockSlot: Slot): void;
+
+  /** EIP-8025: Check if enough execution proofs arrived for a block and transition it to Valid in fork choice */
+  maybeTransitionToValidOnProofArrival(proof: {slot: number; blockRoot: Uint8Array; blockHash: Uint8Array}): void;
 
   regenCanAcceptWork(): boolean;
   blsThreadPoolCanAcceptWork(): boolean;
