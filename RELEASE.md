@@ -82,8 +82,12 @@ For example: After 3-5 days of testing, is performance equal to or better than l
 
 - Ensure step 2 testing is successful and there is sufficient consensus to release `v1.1.0`.
 - Approving the `chore: v1.1.0 release` PR means a team member marks the release as safe, after personally reviewing and / or testing it.
+- Notify in Discord channel #lodestar-private that merge commits will be enabled (🚨 Merge commits enabled 🚨)
+- Turn on "Allow merge commits" under repo settings and set default commit message to "Pull request title"
 - Merge `chore: v1.1.0 release` PR to stable **with "merge commit"** strategy to preserve all history.
-- Merge stable `stable` into `unstable` **with merge commit** strategy. Due to branch protections in `unstable` must open a PR. If there are conflicts, those must be resolved manually. Gitflow may cause changes that conflict between stable and unstable, for example due to a hotfix that is backported. If that happens, disable branch protections in unstable, merge locally fixing conflicts, run lint + tests, push, and re-enable branch protections.
+- Merge stable `stable` into `unstable` **with merge commit** strategy. Due to branch protections in `unstable` must open a PR. If there are conflicts, those must be resolved manually. Gitflow may cause changes that conflict between stable and unstable, for example due to a hotfix that is backported. If that happens, disable branch protections for `unstable`, merge locally fixing conflicts, run lint + tests, push, and re-enable `unstable` branch protections.
+- Turn off "Allow merge commits"
+- Notify in Discord channel #lodestar-private that merge commits were disabled (Merge commits are disabled! ✅)
 
 ### 5. Tag stable release
 
@@ -105,6 +109,12 @@ Tagging a stable release will trigger CI to publish to NPM, dockerhub, and Githu
 
 ### 6. Announce
 
+#### Creating the release notes
+
+- The release created by CI will automatically have the list of PRs in the release
+- Go through the PR list to select a few topics that are most important to users
+- Create a short blurb for for each of the topics and write a short intro blurb that highlights those
+- Insert the blurb at the top of the Release before the `Changelog`
 - Double check that Github release is correct and [add release notes to the Github release page](#edit-the-release)
 - Follow [Publish to Social Media](#publish-to-social-media) steps
 
@@ -287,7 +297,11 @@ Any additional release notes should be professional, comprehensive, and well-con
 
 Have someone else review the release notes and then edit the release.
 
-### Publish to Social Media
+### Check the Release
+
+To verify that the release has be correctly published you need to look in two places, npm and dockerhub. You can easily see all of the npm package versions on the [README.md](./README.md) at the root of the repo. The badges in the table will show the most current versions. For docker you need to visit [dockerhub](https://hub.docker.com/r/chainsafe/lodestar/tags) to look for the corresponding version. Assuming these are present then you can move to the next step of announcements.
+
+### Announcing the Release
 
 The release should be announced on the following social channels:
 
